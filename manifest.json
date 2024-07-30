@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "version": "0.1",
+  "name": "YouTube Russian Video Highlighter",
+  "description": "Highlights YouTube videos from russian",
+  "author": "Dmytro Rozhkov - https://www.linkedin.com/in/dmitry-rozhkov",
+  "host_permissions": [
+    "*://www.youtube.com/*",
+    "*://www.googleapis.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://www.youtube.com/*"],
+      "js": ["content.js"],
+      "type": "module"
+    }
+  ]
+}
