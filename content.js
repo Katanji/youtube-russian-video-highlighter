@@ -1,4 +1,4 @@
-const serverUrl = 'https://6281-216-98-82-134.ngrok-free.app/check-channels';
+const serverUrl = 'https://boss-crab-joint.ngrok-free.app/check-channels';
 const checkedChannels = {};
 
 function extractChannelId(url) {
