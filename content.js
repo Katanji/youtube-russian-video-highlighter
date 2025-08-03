@@ -1,4 +1,4 @@
-const serverUrl = 'https://boss-crab-joint.ngrok-free.app/check-channels';
+const serverUrl = 'https://youtube-highlighter.lt/check-channels';
 const checkedChannels = {};
 
 function extractChannelId(url) {
