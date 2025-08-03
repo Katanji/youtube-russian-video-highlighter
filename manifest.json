@@ -1,6 +1,6 @@
 {
-  "manifest_version": 3,
-  "version": "0.3",
+  "manifest_version": 4,
+  "version": "0.4",
   "name": "YouTube Russian Video Highlighter",
   "description": "Highlights YouTube videos from russian",
   "author": "Dmytro Rozhkov - https://www.linkedin.com/in/dmitry-rozhkov",

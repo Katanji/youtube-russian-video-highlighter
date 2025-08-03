@@ -1,4 +1,4 @@
-const serverUrl = 'https://youtube-highlighter.lt/check-channels';
+const serverUrl = 'https://highlighter.lt/check-channels';
 const checkedChannels = {};
 
 function extractChannelId(url) {
