@@ -1,6 +1,21 @@
 const serverUrl = 'https://highlighter.lt/check-channels';
 const checkedChannels = {};
 
+const FETCH_TIMEOUT_MS = 20000;
+const FETCH_CHUNK_SIZE = 50;
+let processing = false;
+
+// Restore cache from sessionStorage if present
+try {
+    const cached = sessionStorage.getItem('yt_ru_highlighter_checked_channels');
+    if (cached) {
+        const obj = JSON.parse(cached);
+        if (obj && typeof obj === 'object') {
+            Object.assign(checkedChannels, obj);
+        }
+    }
+} catch (_) {}
+
 function extractChannelId(url) {
     const match = url && (
         url.match(/\/channel\/([a-zA-Z0-9_-]+)/) ||
@@ -35,21 +50,49 @@ function getChannelInfo(element) {
 
 async function fetchChannelsInfo(channelIds) {
     if (!channelIds || channelIds.length === 0) return;
-    const response = await fetch(serverUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ channel_ids: channelIds }),
-        mode: 'cors',
-    });
-    if (!response.ok) return;
-    const data = await response.json();
-    Object.entries(data).forEach(([channelId, info]) => {
-        checkedChannels[channelId] = info.country_code === 'RU';
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    try {
+        const response = await fetch(serverUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ channel_ids: channelIds }),
+            mode: 'cors',
+            signal: controller.signal,
+            keepalive: true,
+        });
+        if (!response.ok) return;
+        const data = await response.json();
+        Object.entries(data).forEach(([channelId, info]) => {
+            checkedChannels[channelId] = info && info.country_code === 'RU';
+        });
+        try {
+            sessionStorage.setItem('yt_ru_highlighter_checked_channels', JSON.stringify(checkedChannels));
+        } catch (_) {}
+    } catch (_) {
+        // swallow network/timeout errors
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+function chunkArray(arr, size) {
+    const res = [];
+    for (let i = 0; i < arr.length; i += size) {
+        res.push(arr.slice(i, i + size));
+    }
+    return res;
+}
+
+async function fetchChannelsInfoBatched(channelIds) {
+    const chunks = chunkArray(channelIds, FETCH_CHUNK_SIZE);
+    for (const ids of chunks) {
+        await fetchChannelsInfo(ids);
+    }
 }
 
 function highlightVideos() {
-    document.querySelectorAll('ytd-rich-item-renderer, ytd-rich-grid-media, ytd-video-renderer, ytd-grid-video-renderer, ytd-compact-video-renderer').forEach(video => {
+    document.querySelectorAll('ytd-rich-item-renderer, ytd-rich-grid-media, ytd-video-renderer, ytd-grid-video-renderer, ytd-compact-video-renderer, ytd-reel-video-renderer, ytd-reel-item-renderer').forEach(video => {
         const channelInfo = getChannelInfo(video);
         if (channelInfo && checkedChannels[channelInfo.id]) {
             video.style.setProperty('border', '5px solid red', 'important');
@@ -60,7 +103,7 @@ function highlightVideos() {
 
 function collectChannelIds() {
     const channelIds = new Set();
-    document.querySelectorAll('ytd-rich-item-renderer, ytd-rich-grid-media, ytd-video-renderer, ytd-grid-video-renderer, ytd-compact-video-renderer').forEach(video => {
+    document.querySelectorAll('ytd-rich-item-renderer, ytd-rich-grid-media, ytd-video-renderer, ytd-grid-video-renderer, ytd-compact-video-renderer, ytd-reel-video-renderer, ytd-reel-item-renderer').forEach(video => {
         const channelInfo = getChannelInfo(video);
         if (channelInfo && !checkedChannels.hasOwnProperty(channelInfo.id)) {
             channelIds.add(channelInfo.id);
@@ -71,11 +114,17 @@ function collectChannelIds() {
 
 async function processVideos() {
     if (!window.location.hostname.includes('youtube.com')) return;
-    const channelIds = collectChannelIds();
-    if (channelIds.length > 0) {
-        await fetchChannelsInfo(channelIds);
+    if (processing) return;
+    processing = true;
+    try {
+        const channelIds = collectChannelIds();
+        if (channelIds.length > 0) {
+            await fetchChannelsInfoBatched(channelIds);
+        }
+        highlightVideos();
+    } finally {
+        processing = false;
     }
-    highlightVideos();
 }
 
 function debounce(func, wait) {

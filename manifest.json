@@ -1,21 +1,17 @@
 {
   "manifest_version": 3,
-  "version": "0.4",
+  "version": "0.5.0",
   "name": "YouTube Russian Video Highlighter",
-  "description": "Highlights YouTube videos from russian",
+  "short_name": "YT RU Highlighter",
+  "description": "Highlights YouTube videos from russian channels.",
   "author": "Dmytro Rozhkov - https://www.linkedin.com/in/dmitry-rozhkov",
   "host_permissions": [
-    "*://www.youtube.com/*",
-    "*://www.googleapis.com/*"
+    "https://www.youtube.com/*"
   ],
-  "background": {
-    "service_worker": "background.js"
-  },
   "content_scripts": [
     {
-      "matches": ["*://www.youtube.com/*"],
-      "js": ["content.js"],
-      "type": "module"
+      "matches": ["https://www.youtube.com/*"],
+      "js": ["content.js"]
     }
   ]
 }
