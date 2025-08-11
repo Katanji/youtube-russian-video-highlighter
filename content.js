@@ -2,12 +2,32 @@ const serverUrl = 'https://highlighter.lt/check-channels';
 const checkedChannels = {};
 
 function extractChannelId(url) {
-    const match = url && (url.match(/channel\/([a-zA-Z0-9_-]+)/) || url.match(/youtube\.com\/@([a-zA-Z0-9_-]+)/));
+    const match = url && (
+        url.match(/\/channel\/([a-zA-Z0-9_-]+)/) ||
+        url.match(/youtube\.com\/@([a-zA-Z0-9._-]+)/)
+    );
     return match ? match[1] : null;
 }
 
 function getChannelInfo(element) {
-    const link = element.querySelector("#text.ytd-channel-name a, yt-formatted-string.ytd-channel-name a");
+    // Try multiple modern and legacy selectors for channel link
+    const selectors = [
+        '#channel-name a',
+        'ytd-channel-name a',
+        'a.yt-simple-endpoint.yt-formatted-string[href^="/@"]',
+        'a[href^="/@"]',
+        'a[href*="/channel/"]',
+        'a[href^="https://www.youtube.com/@"]',
+        'a[href*="youtube.com/channel/"]'
+    ];
+    let link = null;
+    for (const s of selectors) {
+        const candidate = element.querySelector(s);
+        if (candidate && candidate.href && /youtube\.com\/(?:@|channel\/)/.test(candidate.href)) {
+            link = candidate;
+            break;
+        }
+    }
     if (!link || !link.href) return null;
     const channelId = extractChannelId(link.href);
     return channelId ? { id: channelId, element } : null;
@@ -29,7 +49,7 @@ async function fetchChannelsInfo(channelIds) {
 }
 
 function highlightVideos() {
-    document.querySelectorAll('ytd-rich-item-renderer, ytd-video-renderer, ytd-grid-video-renderer, ytd-compact-video-renderer').forEach(video => {
+    document.querySelectorAll('ytd-rich-item-renderer, ytd-rich-grid-media, ytd-video-renderer, ytd-grid-video-renderer, ytd-compact-video-renderer').forEach(video => {
         const channelInfo = getChannelInfo(video);
         if (channelInfo && checkedChannels[channelInfo.id]) {
             video.style.setProperty('border', '5px solid red', 'important');
@@ -40,7 +60,7 @@ function highlightVideos() {
 
 function collectChannelIds() {
     const channelIds = new Set();
-    document.querySelectorAll('ytd-rich-item-renderer, ytd-video-renderer, ytd-grid-video-renderer, ytd-compact-video-renderer').forEach(video => {
+    document.querySelectorAll('ytd-rich-item-renderer, ytd-rich-grid-media, ytd-video-renderer, ytd-grid-video-renderer, ytd-compact-video-renderer').forEach(video => {
         const channelInfo = getChannelInfo(video);
         if (channelInfo && !checkedChannels.hasOwnProperty(channelInfo.id)) {
             channelIds.add(channelInfo.id);
