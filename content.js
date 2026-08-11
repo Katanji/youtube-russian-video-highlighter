@@ -1,4 +1,4 @@
-const serverUrl = 'https://highlighter.lt/check-channels';
+const serverUrl = 'https://highlighter.v2202605359112460867.luckysrv.de/check-channels';
 const checkedChannels = {};
 
 const FETCH_TIMEOUT_MS = 20000;
