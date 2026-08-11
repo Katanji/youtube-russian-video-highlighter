@@ -3,17 +3,26 @@ const checkedChannels = {};
 
 const FETCH_TIMEOUT_MS = 20000;
 const FETCH_CHUNK_SIZE = 50;
+const CACHE_KEY = 'yt_ru_highlighter_checked_channels_v2';
+const VIDEO_SELECTOR = 'ytd-rich-item-renderer, ytd-rich-grid-media, ytd-video-renderer, ytd-grid-video-renderer, ytd-compact-video-renderer, ytd-reel-video-renderer, ytd-reel-item-renderer';
 let processing = false;
+let pendingRun = false;
 
 // Restore cache from sessionStorage if present
 try {
-    const cached = sessionStorage.getItem('yt_ru_highlighter_checked_channels');
+    const cached = sessionStorage.getItem(CACHE_KEY);
     if (cached) {
         const obj = JSON.parse(cached);
         if (obj && typeof obj === 'object') {
-            Object.assign(checkedChannels, obj);
+            Object.entries(obj).forEach(([channelId, isRu]) => {
+                // only boolean values are a valid cache entry
+                if (typeof isRu === 'boolean') {
+                    checkedChannels[channelId] = isRu;
+                }
+            });
         }
     }
+    sessionStorage.removeItem('yt_ru_highlighter_checked_channels');
 } catch (_) {}
 
 function extractChannelId(url) {
@@ -67,7 +76,7 @@ async function fetchChannelsInfo(channelIds) {
             checkedChannels[channelId] = info && info.country_code === 'RU';
         });
         try {
-            sessionStorage.setItem('yt_ru_highlighter_checked_channels', JSON.stringify(checkedChannels));
+            sessionStorage.setItem(CACHE_KEY, JSON.stringify(checkedChannels));
         } catch (_) {}
     } catch (_) {
         // swallow network/timeout errors
@@ -91,19 +100,30 @@ async function fetchChannelsInfoBatched(channelIds) {
     }
 }
 
+function setHighlight(video, highlighted) {
+    // youtube reuses card nodes, so the border has to be removed explicitly,
+    // otherwise it stays on a card that now shows another channel
+    if (highlighted) {
+        video.style.setProperty('border', '5px solid red', 'important');
+        video.style.setProperty('box-sizing', 'border-box', 'important');
+        video.dataset.ruHighlighted = '1';
+    } else if (video.dataset.ruHighlighted) {
+        video.style.removeProperty('border');
+        video.style.removeProperty('box-sizing');
+        delete video.dataset.ruHighlighted;
+    }
+}
+
 function highlightVideos() {
-    document.querySelectorAll('ytd-rich-item-renderer, ytd-rich-grid-media, ytd-video-renderer, ytd-grid-video-renderer, ytd-compact-video-renderer, ytd-reel-video-renderer, ytd-reel-item-renderer').forEach(video => {
+    document.querySelectorAll(VIDEO_SELECTOR).forEach(video => {
         const channelInfo = getChannelInfo(video);
-        if (channelInfo && checkedChannels[channelInfo.id]) {
-            video.style.setProperty('border', '5px solid red', 'important');
-            video.style.setProperty('box-sizing', 'border-box', 'important');
-        }
+        setHighlight(video, Boolean(channelInfo) && checkedChannels[channelInfo.id] === true);
     });
 }
 
 function collectChannelIds() {
     const channelIds = new Set();
-    document.querySelectorAll('ytd-rich-item-renderer, ytd-rich-grid-media, ytd-video-renderer, ytd-grid-video-renderer, ytd-compact-video-renderer, ytd-reel-video-renderer, ytd-reel-item-renderer').forEach(video => {
+    document.querySelectorAll(VIDEO_SELECTOR).forEach(video => {
         const channelInfo = getChannelInfo(video);
         if (channelInfo && !checkedChannels.hasOwnProperty(channelInfo.id)) {
             channelIds.add(channelInfo.id);
@@ -114,7 +134,11 @@ function collectChannelIds() {
 
 async function processVideos() {
     if (!window.location.hostname.includes('youtube.com')) return;
-    if (processing) return;
+    if (processing) {
+        // a rerender happened while we were waiting for the server
+        pendingRun = true;
+        return;
+    }
     processing = true;
     try {
         const channelIds = collectChannelIds();
@@ -124,6 +148,10 @@ async function processVideos() {
         highlightVideos();
     } finally {
         processing = false;
+    }
+    if (pendingRun) {
+        pendingRun = false;
+        processVideos();
     }
 }
 
@@ -138,8 +166,13 @@ function debounce(func, wait) {
 if (window.location.hostname.includes('youtube.com')) {
     const debouncedProcessVideos = debounce(processVideos, 250);
     processVideos();
+    // href changes matter too: youtube reuses a card node and just repoints its links
     new MutationObserver(debouncedProcessVideos).observe(document.body, {
         childList: true,
-        subtree: true
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['href']
     });
+    document.addEventListener('yt-navigate-finish', debouncedProcessVideos);
+    document.addEventListener('yt-page-data-updated', debouncedProcessVideos);
 }
